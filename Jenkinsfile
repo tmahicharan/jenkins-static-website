@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -6,6 +7,7 @@ pipeline {
         EC2_USER = 'ubuntu'
         DEPLOY_PATH = '/var/www/html'
         SSH_CREDENTIALS = 'ec2-website-ssh'
+        KNOWN_HOSTS = '/var/lib/jenkins/.ssh/known_hosts'
     }
 
     stages {
@@ -38,25 +40,25 @@ pipeline {
             steps {
                 echo 'Deploying website to AWS EC2'
 
-                sshagent(credentials: ['ec2-website-ssh']) {
+                sshagent(credentials: [env.SSH_CREDENTIALS]) {
                     sh '''
                         set -eu
 
-                        # Verify SSH connectivity
-                        ssh -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes \
+                        # SSH options
+                        SSH_OPTIONS="-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${KNOWN_HOSTS}"
+
+                        # Verify SSH connection and destination directory
+                        ssh $SSH_OPTIONS \
                             ${EC2_USER}@${EC2_HOST} \
                             "test -d ${DEPLOY_PATH}"
 
-                        # Copy website file to EC2
-                        scp -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes \
+                        # Copy website file to the website EC2
+                        scp $SSH_OPTIONS \
                             index.html \
                             ${EC2_USER}@${EC2_HOST}:/tmp/index.html
 
-                        # Publish the website using sudo
-                        ssh -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes \
+                        # Install the file and validate Nginx configuration
+                        ssh $SSH_OPTIONS \
                             ${EC2_USER}@${EC2_HOST} \
                             "sudo install -m 644 /tmp/index.html ${DEPLOY_PATH}/index.html && rm /tmp/index.html && sudo nginx -t"
 
